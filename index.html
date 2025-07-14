@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agenda Semanal</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      margin: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    h1 {
+      margin: 1rem 0 0.5rem 0;
+      text-align: center;
+      user-select: none;
+    }
+
+    #header {
+      width: 600px;
+      max-width: 90vw;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      user-select: none;
+      margin-bottom: 0.5rem;
+    }
+    #header button {
+      background: none;
+      border: none;
+      font-size: 2.5rem;
+      cursor: pointer;
+      font-weight: bold;
+      padding: 0 0.25rem;
+      user-select: none;
+      transition: color 0.2s;
+    }
+    #header button:hover {
+      color: #007bff;
+    }
+    #current-date {
+      font-weight: bold;
+      font-size: 1.25rem;
+      min-width: 150px;
+      text-align: center;
+    }
+
+    /* Barra de progresso */
+    #progress-container {
+      width: 600px;
+      max-width: 90vw;
+      background: #ddd;
+      border-radius: 10px;
+      height: 18px;
+      margin: 0 auto 1rem auto;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background-color: #28a745;
+      transition: width 0.3s ease;
+    }
+    #progress-text {
+      text-align: center;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      user-select: none;
+      font-weight: 600;
+    }
+
+    /* Folha do caderno - sem espiral */
+    #container {
+      background: white;
+      width: 600px;
+      max-width: 90vw;
+      min-height: 400px;
+      padding: 1.5rem 2rem;
+      box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+      border-radius: 15px;
+      position: relative;
+      overflow-y: auto;
+      font-size: 1rem;
+    }
+
+    ul.task-list {
+      list-style-type: none;
+      padding-left: 0;
+      margin-bottom: 1rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    ul.task-list li {
+      padding: 0.3rem 0;
+      display: flex;
+      align-items: center;
+    }
+    ul.task-list li span {
+      flex-grow: 1;
+      margin-left: 8px;
+      word-break: break-word;
+    }
+    ul.task-list li.completed span {
+      text-decoration: line-through;
+      color: black;
+    }
+
+    .remove-btn {
+      background: transparent;
+      border: none;
+      color: red;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-left: 10px;
+      user-select: none;
+      padding: 0 5px;
+    }
+
+    #add-task-btn {
+      display: block;
+      margin: 2rem auto 1rem auto;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s;
+    }
+    #add-task-btn:hover {
+      background-color: #218838;
+    }
+  </style>
+</head>
+<body>
+  <h1>AGENDA</h1>
+  <div id="header">
+    <button id="prev-day" title="Dia anterior">⬅️</button>
+    <div id="current-date" aria-live="polite"></div>
+    <button id="next-day" title="Próximo dia">➡️</button>
+  </div>
+
+  <div id="progress-text">0% das tarefas concluídas</div>
+  <div id="progress-container">
+    <div id="progress-bar"></div>
+  </div>
+
+  <div id="container">
+    <ul class="task-list" id="task-list"></ul>
+  </div>
+  <button id="add-task-btn">Adicionar tarefa</button>
+
+  <script>
+    function formatDate(date) {
+      const days = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+      const dayName = days[date.getDay()];
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year} (${dayName})`;
+    }
+
+    let currentDate = new Date();
+    let tasksPerDate = JSON.parse(localStorage.getItem('tasksPerDate')) || {};
+
+    const currentDateEl = document.getElementById('current-date');
+    const taskListEl = document.getElementById('task-list');
+    const addTaskBtn = document.getElementById('add-task-btn');
+    const prevDayBtn = document.getElementById('prev-day');
+    const nextDayBtn = document.getElementById('next-day');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+
+    function updateProgress(tasks) {
+      if (tasks.length === 0) {
+        progressBar.style.width = '0%';
+        progressText.textContent = `Nenhuma tarefa adicionada`;
+        return;
+      }
+      const doneCount = tasks.filter(t => t.done).length;
+      const percent = Math.round((doneCount / tasks.length) * 100);
+      progressBar.style.width = percent + '%';
+      progressText.textContent = `${percent}% das tarefas concluídas`;
+    }
+
+    function render() {
+      currentDateEl.textContent = formatDate(currentDate);
+      const key = currentDate.toISOString().slice(0,10);
+      const tasks = tasksPerDate[key] || [];
+      taskListEl.innerHTML = '';
+
+      tasks.forEach((task, index) => {
+        const li = document.createElement('li');
+        li.className = task.done ? 'completed' : '';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = task.done;
+
+        checkbox.addEventListener('change', () => {
+          task.done = checkbox.checked;
+          li.classList.toggle('completed', checkbox.checked);
+          saveTasks();
+          updateProgress(tasks);
+        });
+
+        const span = document.createElement('span');
+        span.textContent = task.text;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'X';
+        removeBtn.className = 'remove-btn';
+        removeBtn.title = 'Remover tarefa';
+        removeBtn.addEventListener('click', () => {
+          tasks.splice(index, 1);
+          saveTasks();
+          render();
+          updateProgress(tasks);
+        });
+
+        li.appendChild(checkbox);
+        li.appendChild(span);
+        li.appendChild(removeBtn);
+        taskListEl.appendChild(li);
+      });
+
+      updateProgress(tasks);
+    }
+
+    function saveTasks() {
+      localStorage.setItem('tasksPerDate', JSON.stringify(tasksPerDate));
+    }
+
+    addTaskBtn.addEventListener('click', () => {
+      const taskText = prompt('Digite a tarefa:');
+      if(taskText && taskText.trim() !== ''){
+        const key = currentDate.toISOString().slice(0,10);
+        if(!tasksPerDate[key]){
+          tasksPerDate[key] = [];
+        }
+        tasksPerDate[key].push({ text: taskText.trim(), done: false });
+        saveTasks();
+        render();
+      }
+    });
+
+    prevDayBtn.addEventListener('click', () => {
+      currentDate.setDate(currentDate.getDate() - 1);
+      render();
+    });
+
+    nextDayBtn.addEventListener('click', () => {
+      currentDate.setDate(currentDate.getDate() + 1);
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
